@@ -1,6 +1,4 @@
 """Support for Paperless notification."""
-import os
-
 import voluptuous as vol
 
 from homeassistant.components.notify import (
@@ -10,12 +8,19 @@ from homeassistant.components.notify import (
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD
 import requests
 import base64
+import logging
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 import homeassistant.util.dt as dt_util
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 type SolarlogConfigEntry = ConfigEntry[SolarLogCoordinator]
+from homeassistant.exceptions import HomeAssistantError
+from .const import (
+    DOMAIN
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 CONF_TIMESTAMP = "timestamp"
 
@@ -51,24 +56,31 @@ class PaperlessNotificationService(BaseNotificationService):
         auth_string = f"{self.username}:{self.password}"
         auth_header = base64.b64encode(auth_string.encode("utf-8")).decode("utf-8")
         headers = {
-            "Authorization": f"Basic {auth_header}",
-            "Content-Type": "application/json",
+            "Authorization": f"Basic {auth_header}"
         }
 
-        # Prepare the payload
-        payload = {
-            "documents": [1187],
-            "method": "modify_custom_fields",
-            "parameters": {
-                "add_custom_fields": {2: str(dt_util.utcnow().isoformat())},
-                "remove_custom_fields": {},
-            },
+        try:
+            decodedPDF = base64.b64decode(message, validate=True)
+        except base64.binascii.Error as e:
+            _LOGGER.error("Message is not a base64-encoded message of a valid PDF\nReceived: %s\nException: %s", message, e)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="Message is not a base64-encoded message of a valid PDF"
+            )
+
+        # Send the POST request
+        files = {
+            "document": ("document.pdf", decodedPDF, "application/pdf")
         }
 
         # Send the POST request
-        url = f"{self.host}/api/documents/bulk_edit/"
-        response = requests.post(url, json=payload, headers=headers)
+        url = f"{self.host}/api/documents/post_document/"
+        response = requests.post(url, files=files, headers=headers)
 
         # Log the response for debugging
         if response.status_code != 200:
-            raise Exception(f"Failed to send message: {response.status_code} {response.text}")
+            _LOGGER.error("Paperless API returned non-200 status code: %s\n%s", response.status_code, response.text)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="Paperless API returned non-200 status code; check logs for details",
+            )
