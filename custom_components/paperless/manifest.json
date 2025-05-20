@@ -1,0 +1,9 @@
+{
+    "domain": "paperless",
+    "version": "0.1.0",
+    "name": "Paperless",
+    "config_flow": true,
+    "codeowners": ["@vimaster"],
+    "documentation": "https://github.com/ViMaSter/hacs-paperless/blob/main/README.md",
+    "issue_tracker": "https://github.com/ViMaSter/hacs-paperless/issues"
+  }
